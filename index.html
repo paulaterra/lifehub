@@ -7,12 +7,40 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="LifeHub" />
-  <link rel="manifest" href="manifest.webmanifest?v=71" />
+  <link rel="manifest" href="manifest.webmanifest?v=73" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <title>LifeHub</title>
-  <link rel="stylesheet" href="styles.css?v=71" />
+  <link rel="stylesheet" href="styles.css?v=73" />
 </head>
-<body>
+<body class="auth-pending">
+  
+  <section id="auth-gate" class="auth-gate" aria-live="polite">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <strong>LifeHub de Paula</strong>
+        <span>Accés privat</span>
+      </div>
+
+      <form id="auth-form" class="auth-form">
+        <label>
+          <span>Correu</span>
+          <input id="auth-email" type="email" autocomplete="email" required />
+        </label>
+        <label>
+          <span>Contrasenya</span>
+          <input id="auth-password" type="password" autocomplete="current-password" required />
+        </label>
+        <button id="auth-submit" type="submit">Entrar</button>
+        <p id="auth-error" class="auth-error"></p>
+      </form>
+
+      <div id="auth-setup" class="auth-setup">
+        <strong>LifeHub encara no està connectat a Supabase</strong>
+        <span>Cal afegir la Project URL i la publishable key a <code>supabase-config.js</code>.</span>
+      </div>
+    </div>
+  </section>
+
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand brand-text-only">
@@ -57,7 +85,7 @@
         </button>
       </nav>
 
-      <div class="sidebar-footer"></div>
+      <div class="sidebar-footer"><button id="logout-button" class="logout-button" type="button">Tancar sessió</button></div>
     </aside>
 
     <main class="main">
@@ -97,6 +125,9 @@
     </main>
   </div>
 
-  <script src="app.js?v=71"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js?v=73"></script>
+  <script src="auth-cloud.js?v=73"></script>
+  <script src="app.js?v=73"></script>
 </body>
 </html>

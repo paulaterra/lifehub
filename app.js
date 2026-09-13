@@ -2543,7 +2543,39 @@ function saveLifeHubState(){
     localStorage.setItem(LIFEHUB_STORAGE_KEY,JSON.stringify(data));
     localStorage.setItem(LIFEHUB_PREFS_KEY,JSON.stringify(lifehubPrefs));
   }catch(e){}
+  if(typeof window.lifeHubCloudSave==="function"){
+    window.lifeHubCloudSave(data,lifehubPrefs);
+  }
 }
+
+window.getLifeHubLocalState = function(){
+  return {
+    state: JSON.parse(JSON.stringify(data)),
+    prefs: JSON.parse(JSON.stringify(lifehubPrefs))
+  };
+};
+
+window.applyLifeHubCloudState = function(payload){
+  try{
+    if(payload?.state && typeof payload.state==="object"){
+      Object.keys(data).forEach(key=>{
+        if(Array.isArray(payload.state[key])) data[key]=payload.state[key];
+      });
+    }
+    if(payload?.prefs && typeof payload.prefs==="object"){
+      lifehubPrefs={...lifehubPrefs,...payload.prefs};
+    }
+    try{
+      localStorage.setItem(LIFEHUB_STORAGE_KEY,JSON.stringify(data));
+      localStorage.setItem(LIFEHUB_PREFS_KEY,JSON.stringify(lifehubPrefs));
+    }catch(e){}
+    migrateQuotesSection();
+    render();
+  }catch(e){
+    console.error("No s'ha pogut aplicar l'estat del núvol",e);
+  }
+};
+
 
 function migrateQuotesSection(){
   if(!Array.isArray(data.quotes)) data.quotes=[];
