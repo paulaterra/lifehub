@@ -473,15 +473,13 @@ function globalDashboardBottom(){
   const items=globalDashboardItems();
   const list=items.map(item=>`
     <button class="global-all-row" onclick="openTaggedItem('${item._section}',${JSON.stringify(item.name)},${JSON.stringify(item.id||"")})">
-      <span class="global-all-main">
+      <span class="global-all-top">
         <strong>${item.name}</strong>
-      </span>
-      <span class="global-all-right">
-        <span class="global-all-chips">
-          <span class="type-pill type-${item._section}">${displayItemType(item)}</span>
-          ${globalContextChips(item)}
-        </span>
         <span class="global-all-value">${itemRightValue(item)}</span>
+      </span>
+      <span class="global-all-chips">
+        <span class="type-pill type-${item._section}">${displayItemType(item)}</span>
+        ${globalContextChips(item)}
       </span>
     </button>`).join("");
 
