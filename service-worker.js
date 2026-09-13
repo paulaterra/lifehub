@@ -1,14 +1,16 @@
-const CACHE_NAME = "lifehub-v75";
+const CACHE_NAME = "lifehub-v76";
 const APP_ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=75",
-  "./app.js?v=75",
-  "./supabase-config.js?v=75",
-  "./auth-cloud.js?v=75",
-  "./manifest.webmanifest?v=75",
+  "./styles.css?v=76",
+  "./app.js?v=76",
+  "./supabase-config.js?v=76",
+  "./auth-cloud.js?v=76",
+  "./manifest.webmanifest?v=76",
   "./icons/icon-192.png",
-  "./icons/icon-512.png"
+  "./icons/icon-512.png",
+  "icons/favicon-32.png",
+  "icons/apple-touch-icon.png"
 ];
 
 self.addEventListener("install", event => {
