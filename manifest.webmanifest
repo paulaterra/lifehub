@@ -1,0 +1,25 @@
+{
+  "name": "LifeHub",
+  "short_name": "LifeHub",
+  "description": "Subscripcions, garanties, assegurances, manteniments, dominis i agenda en un sol lloc.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f5f2",
+  "theme_color": "#101010",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

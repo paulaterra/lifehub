@@ -22,3 +22,10 @@ Prototip estàtic d'una web app per centralitzar:
 - `app.js` — dades fictícies, filtres i navegació
 
 És només un prototip frontend: no desa dades ni té backend.
+
+
+## v48
+- Responsive per mòbil i tauleta.
+- PWA instal·lable des de navegador compatible.
+- Service worker i manifest.
+- Correcció: els camps Cost mensual i Cost anual es poden deixar buits (es guarden com 0).

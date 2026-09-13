@@ -6,6 +6,7 @@ const data = {
     {name:"Spotify", scope:"Personal", monthly:11.99, annual:143.88, next:"18 SET", tag:"Oci"},
     {name:"Gimnàs", scope:"Personal", monthly:39.90, annual:478.80, next:"01 OCT", tag:"Salut"}
   ],
+  quotes: [],
   warranties: [
     {
       id:"macbook-pro",
@@ -117,8 +118,54 @@ function filtered(items) {
 function sumMonthly(items){ return filtered(items).reduce((a,b)=>a+(b.monthly||0),0); }
 function sumAnnual(items){ return filtered(items).reduce((a,b)=>a+(b.annual||0),0); }
 
+function recurringPaymentAmount(item,key){
+  const freq=inferFrequency(item,key);
+  const monthly=Number(item?.monthly||0);
+  const annual=Number(item?.annual||0);
+  if(freq==="Mensual") return monthly || (annual ? annual/12 : 0);
+  if(freq==="Anual") return annual || monthly;
+  if(freq==="Trimestral") return monthly || (annual ? annual/4 : 0);
+  if(freq==="Semestral") return monthly || (annual ? annual/2 : 0);
+  if(freq==="Biennal") return annual || monthly;
+  return 0;
+}
+function annualEstimateForItem(item,key){
+  const freq=inferFrequency(item,key);
+  const amount=recurringPaymentAmount(item,key);
+  if(freq==="Mensual") return amount*12;
+  if(freq==="Trimestral") return amount*4;
+  if(freq==="Semestral") return amount*2;
+  if(freq==="Anual") return amount;
+  if(freq==="Biennal") return amount/2;
+  return 0;
+}
+function monthlyCadenceCost(items,key){
+  return filtered(items).filter(i=>inferFrequency(i,key)==="Mensual")
+    .reduce((s,i)=>s+recurringPaymentAmount(i,key),0);
+}
+function annualCadenceCost(items,key){
+  return filtered(items).filter(i=>inferFrequency(i,key)==="Anual")
+    .reduce((s,i)=>s+recurringPaymentAmount(i,key),0);
+}
+function estimatedAnnualTotal(items,key){
+  return filtered(items).reduce((s,i)=>s+annualEstimateForItem(i,key),0);
+}
+function estimatedMonthlyAverage(items,key){
+  return estimatedAnnualTotal(items,key)/12;
+}
+function nextRecurringItem(items,key){
+  const candidates=filtered(items).map(item=>{
+    const date=itemReferenceDate(item,key)
+      ? calculateNextRenewal(itemReferenceDate(item,key),inferFrequency(item,key))
+      : (item.next||"");
+    return {item,date,parsed:parseLifeHubDate(date)};
+  }).filter(x=>x.parsed);
+  candidates.sort((a,b)=>a.parsed-b.parsed);
+  return candidates[0] || null;
+}
+
 function allRecurring() {
-  return [...data.subscriptions, ...data.insurance, ...data.maintenance, ...data.digital];
+  return [...data.subscriptions, ...data.quotes, ...data.insurance, ...data.maintenance, ...data.digital];
 }
 
 function metric(label, value, sub="") {
@@ -135,6 +182,7 @@ function itemHasTag(item, tag){
 function allSections(){
   return [
     {key:"subscriptions", label:"Subscripcions"},
+    {key:"quotes", label:"Quotes"},
     {key:"warranties", label:"Compres i garanties"},
     {key:"insurance", label:"Assegurances"},
     {key:"maintenance", label:"Manteniments"},
@@ -167,8 +215,8 @@ function recurringAnnual(item){
 function tagMetrics(tag){
   const items = getAllItemsForTag(tag);
   const recurring = items.filter(i=>i._section !== "warranties");
-  const monthly = recurring.reduce((s,i)=>s+recurringEquivalentMonthly(i),0);
-  const annual = recurring.reduce((s,i)=>s+recurringAnnual(i),0);
+  const monthly = recurring.reduce((s,i)=>s+recurringEquivalentMonthly(i,i._section),0);
+  const annual = recurring.reduce((s,i)=>s+recurringAnnual(i,i._section),0);
 
   // Prototype estimates for actual month / next month: use recurring monthly items + annual items
   // whose "next" looks like current/next month. If dates are not parseable, monthly items still count.
@@ -293,7 +341,7 @@ function tagDashboard(tag){
         <strong>${item.name}</strong>
         <small>${itemSecondaryInfo(item)}</small>
       </span>
-      <span class="type-pill">${displayItemType(item)}</span>
+      <span class="type-pill type-${item._section}">${displayItemType(item)}</span>
       <span class="all-item-value">${itemRightValue(item)}</span>
     </button>
   `).join("");
@@ -353,7 +401,7 @@ function tagDashboard(tag){
     <div class="section-title"><h2>Per categories</h2><span class="muted">Vista agrupada</span></div>
     <div class="tag-section-grid">
       ${grouped.map(section=>`
-        <div class="panel tag-section-card">
+        <div class="panel tag-section-card tag-section-${section.key}">
           <div class="panel-header">
             <div><h2>${section.label}</h2><div class="muted">${section.items.length} elements</div></div>
             <strong>${section.key==="warranties" ? "" : fmt(sectionCostForTag(section.key,tag))+"/any"}</strong>
@@ -410,6 +458,63 @@ function openTaggedItem(sectionKey, name, id){
   render();
 }
 
+
+function globalDashboardItems(){
+  return allSections().flatMap(section=>
+    (data[section.key]||[]).map(item=>({...item,_section:section.key,_sectionLabel:section.label}))
+  );
+}
+function globalContextChips(item){
+  const tags=[...(item.tags||[])];
+  if(item.scope && !tags.includes(item.scope)) tags.unshift(item.scope);
+  return [...new Set(tags.filter(Boolean))].map(t=>`<span class="scope-pill">${t}</span>`).join("");
+}
+function globalDashboardBottom(){
+  const items=globalDashboardItems();
+  const list=items.map(item=>`
+    <button class="global-all-row" onclick="openTaggedItem('${item._section}',${JSON.stringify(item.name)},${JSON.stringify(item.id||"")})">
+      <span class="global-all-main">
+        <strong>${item.name}</strong>
+      </span>
+      <span class="global-all-right">
+        <span class="global-all-chips">
+          <span class="type-pill type-${item._section}">${displayItemType(item)}</span>
+          ${globalContextChips(item)}
+        </span>
+        <span class="global-all-value">${itemRightValue(item)}</span>
+      </span>
+    </button>`).join("");
+
+  const grouped=allSections().map(section=>({...section,items:(data[section.key]||[])})).filter(s=>s.items.length);
+
+  return `
+    <div class="section-title global-complete-title"><h2>Tot</h2><span class="muted">${items.length} elements</span></div>
+    <div class="panel all-items-panel complete-list-panel">
+      <div class="panel-header"><div><h2>Llistat complet</h2><div class="muted">Subscripcions, quotes, compres, assegurances, manteniments i digital en una sola vista.</div></div></div>
+      <div class="all-items-list global-all-list">${list || `<div class="empty-list">Encara no hi ha cap element.</div>`}</div>
+    </div>
+
+    <div class="section-title"><h2>Per categories</h2><span class="muted">Vista agrupada</span></div>
+    <div class="tag-section-grid global-category-grid">
+      ${grouped.map(section=>`
+        <div class="panel tag-section-card tag-section-${section.key}">
+          <div class="panel-header">
+            <div><h2>${section.label}</h2><div class="muted">${section.items.length} elements</div></div>
+            <span class="type-pill type-${section.key}">${section.label}</span>
+          </div>
+          <div class="tag-item-list">
+            ${section.items.map(item=>`
+              <button class="tag-item-row" onclick="openTaggedItem('${section.key}',${JSON.stringify(item.name)},${JSON.stringify(item.id||"")})">
+                <span>
+                  <strong>${item.name}</strong>
+                  <small class="global-category-chips">${globalContextChips(item)}</small>
+                </span>
+                <span>${itemRightValue({...item,_section:section.key})}</span>
+              </button>`).join("")}
+          </div>
+        </div>`).join("")}
+    </div>`;
+}
 function dashboard() {
   const recurring = allRecurring();
   const monthly = sumMonthly(recurring);
@@ -417,10 +522,11 @@ function dashboard() {
   const warrantyCount = filtered(data.warranties).length;
 
   const categories = [
-    ["Subscripcions", sumAnnual(data.subscriptions)],
-    ["Assegurances", sumAnnual(data.insurance)],
-    ["Manteniments", sumAnnual(data.maintenance)],
-    ["Dominis i digital", sumAnnual(data.digital)]
+    ["Subscripcions", estimatedAnnualTotal(data.subscriptions,"subscriptions")],
+    ["Quotes", estimatedAnnualTotal(data.quotes,"quotes")],
+    ["Assegurances", estimatedAnnualTotal(data.insurance,"insurance")],
+    ["Manteniments", estimatedAnnualTotal(data.maintenance,"maintenance")],
+    ["Dominis i digital", estimatedAnnualTotal(data.digital,"digital")]
   ];
   const max = Math.max(...categories.map(x=>x[1]),1);
 
@@ -469,16 +575,19 @@ function dashboard() {
     <div class="category-grid">
       ${[
         ["Subscripcions", data.subscriptions, "subscripcions"],
+        ["Quotes", data.quotes, "quotes"],
         ["Assegurances", data.insurance, "pòlisses"],
         ["Manteniments", data.maintenance, "revisions"],
         ["Dominis i digital", data.digital, "serveis"]
       ].map(([title,items,label])=>`
         <div class="category-card">
           <div class="muted">${title}</div>
-          <div class="big">${fmt(sumAnnual(items))}/any</div>
-          <div class="muted">${filtered(items).length} ${label} · ${fmt(sumMonthly(items))}/mes</div>
+          <div class="big">${fmt(estimatedAnnualTotal(items, ({Subscripcions:"subscriptions",Quotes:"quotes",Assegurances:"insurance",Manteniments:"maintenance","Dominis i digital":"digital"})[title]||"subscriptions"))}/any</div>
+          <div class="muted">${filtered(items).length} ${label} · ${fmt(estimatedMonthlyAverage(items, ({Subscripcions:"subscriptions",Quotes:"quotes",Assegurances:"insurance",Manteniments:"maintenance","Dominis i digital":"digital"})[title]||"subscriptions"))}/mes de mitjana</div>
         </div>`).join("")}
     </div>
+
+    ${globalDashboardBottom()}
   `;
 }
 
@@ -490,12 +599,17 @@ function recurringView(title, items, noun, key) {
   }
 
   const f = filtered(items);
+  const nextItem=nextRecurringItem(items,key);
+  const annualTotal=estimatedAnnualTotal(items,key);
+  const monthlyAverage=annualTotal/12;
   return `
-    <div class="grid metrics">
-      ${metric(`Cost mensual`, fmt(sumMonthly(items)), `Mitjana mensual equivalent`)}
-      ${metric(`Cost anual`, fmt(sumAnnual(items)), `Estimació anual`)}
+    <div class="grid metrics recurring-metrics">
+      ${metric(`Cost mensual`, fmt(monthlyCadenceCost(items,key)), `Només pagaments mensuals`)}
+      ${metric(`Cost anual`, fmt(annualCadenceCost(items,key)), `Només pagaments anuals`)}
+      ${metric(`Proper pagament`, nextItem?.date || "—", nextItem?.item?.name || "Sense elements")}
+      ${metric(`Mitjana mensual total`, fmt(monthlyAverage), `Mitjana anual total ÷ 12`)}
+      ${metric(`Mitjana anual total`, fmt(annualTotal), `Equivalent anual de tots els pagaments`)}
       ${metric(`Actius`, f.length, noun)}
-      ${metric(`Proper pagament`, f[0]?.next || "—", f[0]?.name || "Sense elements")}
     </div>
     <div class="section-title"><h2>${title}</h2><span class="muted">${f.length} elements</span></div>
     <div class="panel">
@@ -503,14 +617,14 @@ function recurringView(title, items, noun, key) {
         <thead><tr><th>Nom</th><th>Àmbit</th><th>Tipus</th><th>Periodicitat</th><th>Mensual</th><th>Anual</th><th>Proper</th><th>Accions</th></tr></thead>
         <tbody>
           ${f.map((x,idx)=>`<tr>
-            <td><strong>${x.name}</strong></td>
-            <td><div class="tag-cell">${tagChips(x)}</div></td>
-            <td>${x.tag}</td>
-            <td><span class="meta-chip meta-cadence">${inferFrequency(x,key)}</span></td>
-            <td>${fmt(x.monthly)}</td>
-            <td>${fmt(x.annual)}</td>
-            <td>${x.next}</td>
-            <td>
+            <td data-label="Nom"><strong>${x.name}</strong></td>
+            <td data-label="Àmbit"><div class="tag-cell">${tagChips(x)}</div></td>
+            <td data-label="Tipus">${x.tag}</td>
+            <td data-label="Periodicitat"><span class="meta-chip meta-cadence">${inferFrequency(x,key)}</span></td>
+            <td data-label="Mensual">${fmt(x.monthly)}</td>
+            <td data-label="Anual">${fmt(x.annual)}</td>
+            <td data-label="Proper">${itemReferenceDate(x,key) ? calculateNextRenewal(itemReferenceDate(x,key),inferFrequency(x,key)) : (x.next||"—")}</td>
+            <td data-label="Accions">
               <div class="table-actions">
                 <button class="row-btn recurring-action" data-action="view" data-key="${key}" data-index="${data[key].indexOf(x)}">Veure</button>
                 <button class="row-btn recurring-action" data-action="history" data-key="${key}" data-index="${data[key].indexOf(x)}">Historial</button>
@@ -588,7 +702,7 @@ function recurringDetailView(title, item, key) {
         <h2>${item.name}</h2>
         <div class="detail-meta">${item.tag}</div>
       </div>
-      <div class="detail-price">${fmt(item.annual)}/any</div>
+      <div class="detail-price">${Number(item.annual||0)>0 ? `${fmt(item.annual)}/any` : (Number(item.monthly||0)>0 ? `${fmt(item.monthly)}/mes` : "—")}</div>
     </div>
 
     <div class="detail-grid">
@@ -601,8 +715,8 @@ function recurringDetailView(title, item, key) {
           ${infoRow("Cost mensual",fmt(item.monthly))}
           ${infoRow("Cost anual",fmt(item.annual))}
           ${infoRow("Periodicitat",inferFrequency(item,key))}
-          ${item.startDate ? infoRow(referenceDateLabel(key),item.startDate) : ""}
-          ${infoRow(nextDateLabel(key),item.next||"—")}
+          ${itemReferenceDate(item,key) ? infoRow(referenceDateLabel(key),itemReferenceDate(item,key)) : ""}
+          ${infoRow(nextDateLabel(key), itemReferenceDate(item,key) ? calculateNextRenewal(itemReferenceDate(item,key),inferFrequency(item,key)) : (item.next||"—"))}
         </div>
       </div>
       <div class="panel">
@@ -616,10 +730,10 @@ function recurringDetailView(title, item, key) {
 }
 
 function openRecurring(key,name){ selectedRecurring={key,name}; recurringEditMode=false; render(); }
-function editRecurringFromList(key,name){ pendingEditDocs=[]; selectedRecurring={key,name}; recurringEditMode=true; render(); setTimeout(()=>bindRecurrenceFields("r",key),0); }
+function editRecurringFromList(key,name){ pendingEditDocs=[]; selectedRecurring={key,name}; recurringEditMode=true; render(); setTimeout(()=>{bindRecurrenceFields("r",key);syncRecurrencePreview("r",key);},30); }
 
 function closeRecurring(){ selectedRecurring=null; recurringEditMode=false; render(); }
-function startRecurringEdit(){ pendingEditDocs=[]; recurringEditMode=true; render(); setTimeout(()=>bindRecurrenceFields("r",selectedRecurring?.key||currentView),0); }
+function startRecurringEdit(){ pendingEditDocs=[]; recurringEditMode=true; render(); const key=selectedRecurring?.key||currentView; setTimeout(()=>{bindRecurrenceFields("r",key);syncRecurrencePreview("r",key);},30); }
 function cancelRecurringEdit(){ recurringEditMode=false; render(); }
 
 function saveRecurringEdit(key, oldName){
@@ -630,12 +744,14 @@ function saveRecurringEdit(key, oldName){
   const draft={...item};
   draft.name = document.querySelector("#field-r-name")?.value || item.name;
   draft.tag = key==="subscriptions" ? getSubscriptionTypeValue("r") : (document.querySelector("#field-r-tag")?.value || item.tag);
-  draft.monthly = Number((document.querySelector("#field-r-monthly")?.value || item.monthly || 0).toString().replace(",","."));
-  draft.annual = Number((document.querySelector("#field-r-annual")?.value || item.annual || 0).toString().replace(",","."));
-  const recurrence=getRecurrenceData("r",key,item.next||"—");
+  const monthlyRaw = document.querySelector("#field-r-monthly")?.value ?? "";
+  const annualRaw = document.querySelector("#field-r-annual")?.value ?? "";
+  draft.monthly = monthlyRaw.trim()==="" ? 0 : Number(monthlyRaw.toString().replace(",","."));
+  draft.annual = annualRaw.trim()==="" ? 0 : Number(annualRaw.toString().replace(",","."));
+  const recurrence=getRecurrenceData("r",key,"—");
   draft.startDate=recurrence.startDate;
   draft.frequency=recurrence.frequency;
-  draft.next=recurrence.next;
+  draft.next=recurrence.startDate ? calculateNextRenewal(recurrence.startDate,recurrence.frequency) : "—";
   draft.scope = document.querySelector("#field-r-scope")?.value || item.scope;
   draft.tags = Array.from(new Set([draft.scope, ...getSelectedTags("r")].filter(Boolean)));
   draft.notes = document.querySelector("#field-r-notes")?.value || "";
@@ -712,13 +828,13 @@ function warrantiesView() {
         <thead><tr><th>Producte</th><th>Àmbit</th><th>Botiga</th><th>Import</th><th>Garantia fins</th><th>Documents</th><th></th></tr></thead>
         <tbody>
           ${f.map((x,i)=>`<tr>
-            <td><strong>${x.name}</strong><div class="item-sub">${x.brand} · ${x.model}</div></td>
-            <td><div class="tag-cell">${tagChips(x)}</div></td>
-            <td>${x.seller}</td>
-            <td>${fmt(x.amount)}</td>
-            <td>${x.expiry}</td>
-            <td>${ensureHistory(x,"warranties").reduce((s,h)=>s+(h.documents||[]).length,0)} arx.</td>
-            <td>
+            <td data-label="Producte"><strong>${x.name}</strong><div class="item-sub">${x.brand} · ${x.model}</div></td>
+            <td data-label="Àmbit"><div class="tag-cell">${tagChips(x)}</div></td>
+            <td data-label="Botiga">${x.seller}</td>
+            <td data-label="Import">${fmt(x.amount)}</td>
+            <td data-label="Garantia fins">${x.expiry}</td>
+            <td data-label="Documents">${ensureHistory(x,"warranties").reduce((s,h)=>s+(h.documents||[]).length,0)} arx.</td>
+            <td data-label="Accions">
               <div class="table-actions">
                 <button class="row-btn" onclick="openWarranty('${x.id}')">Veure</button>
                 <button class="row-btn" onclick="openWarrantyHistory('${x.id}')">Historial</button>
@@ -939,10 +1055,11 @@ function getSubscriptionTypeValue(prefix){
 const recurrenceOptions=["Mensual","Trimestral","Semestral","Anual","Biennal","Sense renovació"];
 
 function defaultFrequencyFor(key){
-  return key==="subscriptions" ? "Mensual" : key==="insurance" ? "Anual" : key==="maintenance" ? "Anual" : key==="digital" ? "Anual" : "Anual";
+  return (key==="subscriptions" || key==="quotes") ? "Mensual" : key==="insurance" ? "Anual" : key==="maintenance" ? "Anual" : key==="digital" ? "Anual" : "Anual";
 }
 function referenceDateLabel(key){
   return key==="subscriptions" ? "Data d'alta / últim cobrament" :
+         key==="quotes" ? "Data d'alta / últim pagament" :
          key==="insurance" ? "Data d'alta / última renovació" :
          key==="maintenance" ? "Data de l'últim manteniment" :
          key==="digital" ? "Data de registre / última renovació" :
@@ -950,6 +1067,7 @@ function referenceDateLabel(key){
 }
 function nextDateLabel(key){
   return key==="subscriptions" ? "Proper cobrament" :
+         key==="quotes" ? "Proper pagament" :
          key==="insurance" ? "Propera renovació" :
          key==="maintenance" ? "Proper manteniment" :
          key==="digital" ? "Propera renovació" : "Proper";
@@ -986,6 +1104,32 @@ function formatCatalanDate(date){
   const months=["GEN","FEB","MAR","ABR","MAI","JUN","JUL","AGO","SET","OCT","NOV","DES"];
   return `${String(date.getDate()).padStart(2,"0")} ${months[date.getMonth()]} ${date.getFullYear()}`;
 }
+function dateToIso(date){
+  if(!(date instanceof Date) || isNaN(date)) return "";
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
+}
+function flexibleDateToIso(value){
+  if(!value) return "";
+  const raw=String(value).trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  let m=raw.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
+  if(m){
+    return `${m[3]}-${String(m[2]).padStart(2,"0")}-${String(m[1]).padStart(2,"0")}`;
+  }
+  m=raw.toUpperCase().match(/^(\d{1,2})\s+(GEN|FEB|MAR|ABR|MAI|JUN|JUL|AGO|SET|OCT|NOV|DES)\s+(\d{4})$/);
+  if(m){
+    const months=["GEN","FEB","MAR","ABR","MAI","JUN","JUL","AGO","SET","OCT","NOV","DES"];
+    return `${m[3]}-${String(months.indexOf(m[2])+1).padStart(2,"0")}-${String(m[1]).padStart(2,"0")}`;
+  }
+  return "";
+}
+function itemReferenceDate(item,key){
+  if(item?.startDate) return item.startDate;
+  if(key!=="warranties" && Array.isArray(item?.history) && item.history.length){
+    return flexibleDateToIso(item.history[0]?.date);
+  }
+  return "";
+}
 function calculateNextRenewal(referenceIso,frequency){
   const base=parseIsoDate(referenceIso);
   const months=frequencyMonths(frequency);
@@ -1002,7 +1146,7 @@ function calculateNextRenewal(referenceIso,frequency){
 }
 function recurrenceFields(prefix,item,key){
   const frequency=inferFrequency(item||{},key);
-  const startDate=item?.startDate||"";
+  const startDate=itemReferenceDate(item,key);
   const next=startDate ? calculateNextRenewal(startDate,frequency) : (item?.next||"—");
   return `
     ${fieldInput(referenceDateLabel(key),`${prefix}-startDate`,startDate,"date")}
@@ -1022,12 +1166,19 @@ function syncRecurrencePreview(prefix,key){
 function bindRecurrenceFields(prefix,key){
   const date=document.querySelector(`#field-${prefix}-startDate`);
   const frequency=document.querySelector(`#field-${prefix}-frequency`);
-  [date,frequency].forEach(el=>el?.addEventListener("change",()=>syncRecurrencePreview(prefix,key)));
+  [date,frequency].forEach(el=>{
+    if(!el || el.dataset.recurrenceBound==="1") return;
+    const update=()=>syncRecurrencePreview(prefix,key);
+    el.addEventListener("change",update);
+    el.addEventListener("input",update);
+    el.dataset.recurrenceBound="1";
+  });
+  syncRecurrencePreview(prefix,key);
 }
 function getRecurrenceData(prefix,key,fallbackNext="—"){
   const startDate=document.querySelector(`#field-${prefix}-startDate`)?.value||"";
   const frequency=document.querySelector(`#field-${prefix}-frequency`)?.value||defaultFrequencyFor(key);
-  const next=startDate ? calculateNextRenewal(startDate,frequency) : fallbackNext;
+  const next=startDate ? calculateNextRenewal(startDate,frequency) : "—";
   return {startDate,frequency,next};
 }
 
@@ -1054,6 +1205,7 @@ function getSelectedTags(prefix){
 function sectionLabel(key){
   return ({
     subscriptions:"Subscripció",
+    quotes:"Quota",
     warranties:"Compra / garantia",
     insurance:"Assegurança",
     maintenance:"Manteniment",
@@ -1074,7 +1226,7 @@ function tagChips(item){
   return tags.map(t=>`<span class="tag">${t}</span>`).join(" ");
 }
 function historyDateToday(){
-  return "12 SET 2026";
+  return formatCatalanDate(new Date());
 }
 function docTypeFromName(name=""){
   const lower=name.toLowerCase();
@@ -1128,7 +1280,7 @@ function historySummary(item,key,hist){
       <div><span>Intervencions</span><strong>${valued.length}</strong></div>
     </div>`;
   }
-  if(key==="subscriptions"){
+  if(key==="subscriptions" || key==="quotes"){
     return `<div class="history-summary"><div><span>Preu actual</span><strong>${fmt(item.monthly)}/mes</strong></div><div><span>Moviments</span><strong>${hist.length}</strong></div></div>`;
   }
   return "";
@@ -1232,6 +1384,7 @@ function saveHistoryEditor(){
   const c=editingHistoryContext;
   const entry=historyEditorEntry();
   if(!c || !entry) return;
+  const previousDate=entry.date;
   entry.date=document.querySelector("#history-edit-date")?.value||entry.date;
   entry.title=document.querySelector("#history-edit-title")?.value||entry.title;
   const amountRaw=document.querySelector("#history-edit-amount")?.value;
@@ -1241,6 +1394,20 @@ function saveHistoryEditor(){
     d.from=document.querySelector(`#history-detail-from-${i}`)?.value||"";
     d.to=document.querySelector(`#history-detail-to-${i}`)?.value||"";
   });
+
+  // L'entrada inicial és l'origen temporal de la fitxa.
+  // Si se'n corregeix la data, la data de referència i el proper venciment
+  // també s'han de corregir automàticament.
+  if(entry.type==="created" && entry.date!==previousDate && c.key!=="warranties"){
+    const item=getHistoryItem(c.key,c.ref);
+    const iso=flexibleDateToIso(entry.date);
+    if(item && iso){
+      item.startDate=iso;
+      item.frequency=inferFrequency(item,c.key);
+      item.next=calculateNextRenewal(item.startDate,item.frequency);
+    }
+  }
+
   saveLifeHubState?.();
   closeHistoryEditor();
   render();
@@ -1540,13 +1707,13 @@ function parseLifeHubDate(value, fallbackYear=2026){
 }
 function agendaEvents(){
   const events=[];
-  ["subscriptions","insurance","maintenance","digital"].forEach(key=>{
+  ["subscriptions","quotes","insurance","maintenance","digital"].forEach(key=>{
     (data[key]||[]).forEach(item=>{
       if(!itemHasTag(item,currentFilter) || !item.next) return;
       events.push({
         name:item.name,date:item.next,parsed:parseLifeHubDate(item.next),
         section:key,
-        sectionLabel:{subscriptions:"Subscripció",insurance:"Assegurança",maintenance:"Manteniment",digital:"Domini i digital"}[key],
+        sectionLabel:{subscriptions:"Subscripció",quotes:"Quota",insurance:"Assegurança",maintenance:"Manteniment",digital:"Domini i digital"}[key],
         scope:item.scope || (item.tags?.[0] || ""),tag:item.tag || ""
       });
     });
@@ -1597,6 +1764,7 @@ function miniMonthCalendar(events, year, month){
 
     const colorMap={
       subscriptions:"var(--section-subscriptions)",
+      quotes:"var(--section-quotes)",
       warranties:"var(--section-warranties)",
       insurance:"var(--section-insurance)",
       maintenance:"var(--section-maintenance)",
@@ -1747,6 +1915,7 @@ function renderAddModal(){
         <span>Tipus</span>
         <select id="add-type">
           <option value="subscriptions">Subscripció</option>
+          <option value="quotes">Quota</option>
           <option value="warranties">Compra i garantia</option>
           <option value="insurance">Assegurança</option>
           <option value="maintenance">Manteniment</option>
@@ -1774,7 +1943,7 @@ function renderAddForm(){
   if (!area) return;
   if (addType === "warranties") {
     area.innerHTML = `
-      <div class="form-grid modal-form">
+      <div class="add-form-grid">
         ${fieldInput("Producte","add-name","")}
         ${fieldInput("Marca","add-brand","")}
         ${fieldInput("Model","add-model","")}
@@ -1792,7 +1961,7 @@ function renderAddForm(){
       </div>`;
   } else {
     area.innerHTML = `
-      <div class="form-grid modal-form">
+      <div class="add-form-grid">
         ${fieldInput("Nom","add-name","")}
         ${fieldSelect("Àmbit principal","add-scope",(["Personal","Professional","Casa","Cotxe","Mascotes","Salut"].includes(addContextTag) ? addContextTag : "Personal"),["Personal","Professional","Casa","Cotxe","Mascotes","Salut"])}
         ${tagMultiSelect("add", [(["Personal","Professional","Casa","Cotxe","Mascotes","Salut"].includes(addContextTag) ? addContextTag : "Personal")].filter(Boolean))}
@@ -1969,10 +2138,12 @@ function saveNewItem(){
       notes:""
     });
     const created=data[addType][data[addType].length-1];
-    created.history=[{date:historyDateToday(),title:"Element afegit",text:"",type:"created",amount:null,details:[],documents:[...pendingCreateDocs]}];
+    const createdHistoryDate=created.startDate ? formatCatalanDate(parseIsoDate(created.startDate)) : historyDateToday();
+    created.history=[{date:createdHistoryDate,title:"Element afegit",text:"",type:"created",amount:null,details:[],documents:[...pendingCreateDocs]}];
     pendingCreateDocs=[];
     currentView = {
       subscriptions:"subscriptions",
+      quotes:"quotes",
       insurance:"insurance",
       maintenance:"maintenance",
       digital:"digital"
@@ -2011,6 +2182,7 @@ function render() {
   const views = {
     dashboard: ["Bon vespre, Paula", dashboard()],
     subscriptions: ["Subscripcions", recurringView("Subscripcions", data.subscriptions, "subscripcions actives", "subscriptions")],
+    quotes: ["Quotes", recurringView("Quotes", data.quotes, "quotes actives", "quotes")],
     warranties: ["Compres i garanties", warrantiesView()],
     insurance: ["Assegurances", recurringView("Assegurances", data.insurance, "pòlisses actives", "insurance")],
     maintenance: ["Manteniments", recurringView("Manteniments", data.maintenance, "manteniments", "maintenance")],
@@ -2212,7 +2384,7 @@ function injectAttention(){
   else vc.insertAdjacentHTML("afterbegin",attentionPanel());
 }
 function sectionNameForSearch(key){
-  return {subscriptions:"Subscripcions",warranties:"Compres i garanties",insurance:"Assegurances",maintenance:"Manteniments",digital:"Dominis i digital"}[key]||key;
+  return {subscriptions:"Subscripcions",quotes:"Quotes",warranties:"Compres i garanties",insurance:"Assegurances",maintenance:"Manteniments",digital:"Dominis i digital"}[key]||key;
 }
 function runGlobalSearch(q){
   const box=document.querySelector("#global-search-results");
@@ -2285,7 +2457,22 @@ function saveLifeHubState(){
     localStorage.setItem(LIFEHUB_PREFS_KEY,JSON.stringify(lifehubPrefs));
   }catch(e){}
 }
+
+function migrateQuotesSection(){
+  if(!Array.isArray(data.quotes)) data.quotes=[];
+  const gymIndex=(data.subscriptions||[]).findIndex(item=>{
+    const txt=`${item.name||""} ${item.tag||""}`.toLowerCase();
+    return txt.includes("gimnàs") || txt.includes("gimnas") || txt.includes("gym");
+  });
+  if(gymIndex>=0){
+    const gym=data.subscriptions.splice(gymIndex,1)[0];
+    if(!data.quotes.some(x=>x.name===gym.name)) data.quotes.push(gym);
+  }
+}
 loadLifeHubState();
+migrateQuotesSection();
+saveLifeHubState();
+
 
 function ensureProductFields(item,key){
   if(!item) return item;
@@ -2406,14 +2593,14 @@ function assignAssetBlock(item,key){
 }
 function setItemAsset(key,ref,val){const item=productItem(key,ref);if(!item)return;item.asset=val;autoHistory(item,`Relació actualitzada · ${val||"sense actiu"}`);render();}
 function dashboardExtra(){
-  const annual=allRecurring().reduce((s,i)=>s+recurringAnnual(i),0);
+  const annual=allSections().filter(s=>s.key!=="warranties").reduce((sum,s)=>sum+estimatedAnnualTotal(data[s.key]||[],s.key),0);
   return `${assetCards()}<div class="section-title"><h2>Comparativa anual</h2><span class="muted">Evolució de la despesa</span></div>
   <div class="panel annual-compare"><div><span>2025</span><strong>Sense dades</strong><small>LifeHub encara no té historial suficient</small></div><div><span>2026</span><strong>${fmt(annual)}</strong><small>Despesa recurrent registrada</small></div></div>`;
 }
 function makeDashboardBarsClickable(){
   document.querySelectorAll(".bar-row").forEach(row=>{
     const name=row.querySelector("span")?.textContent?.trim();
-    const map={"Subscripcions":"subscriptions","Assegurances":"insurance","Manteniments":"maintenance","Dominis i digital":"digital"};
+    const map={"Subscripcions":"subscriptions","Quotes":"quotes","Assegurances":"insurance","Manteniments":"maintenance","Dominis i digital":"digital"};
     if(map[name]){row.classList.add("clickable");row.onclick=()=>{currentView=map[name];tagDashboardOpen=false;render();};}
   });
 }
@@ -2476,3 +2663,12 @@ document.querySelector("#add-tag-filter")?.addEventListener("click", (e)=>{
   e.stopPropagation();
   createCustomTag();
 });
+
+
+/* === v48 / PWA === */
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./service-worker.js").catch(() => {});
+  });
+}
