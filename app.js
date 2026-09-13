@@ -2024,8 +2024,8 @@ function renderAddForm(){
         ${fieldInput("Preu","add-amount","","number")}
         ${fieldInput("Data de compra","add-purchaseDate","")}
         ${fieldInput("Garantia fins","add-expiry","")}
-        ${fieldSelect("Àmbit principal","add-scope",(["Personal","Professional","Casa","Cotxe","Mascotes","Salut"].includes(addContextTag) ? addContextTag : "Personal"),["Personal","Professional","Casa","Cotxe","Mascotes","Salut"])}
-        ${tagMultiSelect("add", [(["Personal","Professional","Casa","Cotxe","Mascotes","Salut"].includes(addContextTag) ? addContextTag : "Personal")].filter(Boolean))}
+        ${fieldSelect("Àmbit principal","add-scope",(["Personal","Professional","Casa","Cotxe","Mascotes","Salut"].includes(addContextTag) ? addContextTag : ""),["","Personal","Professional","Casa","Cotxe","Mascotes","Salut"])}
+        ${tagMultiSelect("add", [(["Personal","Professional","Casa","Cotxe","Mascotes","Salut"].includes(addContextTag) ? addContextTag : "")].filter(Boolean))}
         ${fieldInput("Categoria","add-tag","")}
         ${fieldInput("Botiga / web","add-seller","")}
         ${fieldInput("Web","add-website","")}
@@ -2037,8 +2037,8 @@ function renderAddForm(){
     area.innerHTML = `
       <div class="add-form-grid">
         ${fieldInput("Nom","add-name","")}
-        ${fieldSelect("Àmbit principal","add-scope",(["Personal","Professional","Casa","Cotxe","Mascotes","Salut"].includes(addContextTag) ? addContextTag : "Personal"),["Personal","Professional","Casa","Cotxe","Mascotes","Salut"])}
-        ${tagMultiSelect("add", [(["Personal","Professional","Casa","Cotxe","Mascotes","Salut"].includes(addContextTag) ? addContextTag : "Personal")].filter(Boolean))}
+        ${fieldSelect("Àmbit principal","add-scope",(["Personal","Professional","Casa","Cotxe","Mascotes","Salut"].includes(addContextTag) ? addContextTag : ""),["","Personal","Professional","Casa","Cotxe","Mascotes","Salut"])}
+        ${tagMultiSelect("add", [(["Personal","Professional","Casa","Cotxe","Mascotes","Salut"].includes(addContextTag) ? addContextTag : "")].filter(Boolean))}
         ${addType === "subscriptions" ? subscriptionTypeFields("add","Software") : fieldInput("Tipus / categoria","add-tag","")}
         ${fieldInput("Cost mensual","add-monthly","","number")}
         ${fieldInput("Cost anual","add-annual","","number")}
@@ -2187,8 +2187,8 @@ function saveNewItem(){
       name,
       brand:getVal("add-brand"),
       model:getVal("add-model"),
-      scope:getVal("add-scope") || "Personal",
-      tags:Array.from(new Set([getVal("add-scope") || "Personal", ...getSelectedTags("add")].filter(Boolean))),
+      scope:getVal("add-scope") || "",
+      tags:Array.from(new Set([getVal("add-scope"), ...getSelectedTags("add")].filter(Boolean))),
       amount:Number(getVal("add-amount") || 0),
       purchaseDate:getVal("add-purchaseDate"),
       expiry:getVal("add-expiry"),
@@ -2213,8 +2213,8 @@ function saveNewItem(){
     const recurrence=getRecurrenceData("add",addType,"—");
     data[addType].push({
       name,
-      scope:getVal("add-scope") || "Personal",
-      tags:Array.from(new Set([getVal("add-scope") || "Personal", ...getSelectedTags("add")].filter(Boolean))),
+      scope:getVal("add-scope") || "",
+      tags:Array.from(new Set([getVal("add-scope"), ...getSelectedTags("add")].filter(Boolean))),
       tag:addType === "subscriptions" ? getSubscriptionTypeValue("add") : getVal("add-tag"),
       monthly:Number(getVal("add-monthly") || 0),
       annual:Number(getVal("add-annual") || 0),
@@ -2255,6 +2255,8 @@ function saveNewItem(){
   document.querySelectorAll(".nav-item").forEach(b=>{
     b.classList.toggle("active", b.dataset.view===currentView);
   });
+  saveLifeHubState();
+  document.querySelector("#add-modal")?.remove();
   render();
 }
 function render() {

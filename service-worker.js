@@ -1,12 +1,12 @@
-const CACHE_NAME = "lifehub-v73";
+const CACHE_NAME = "lifehub-v74";
 const APP_ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=73",
-  "./app.js?v=73",
-  "./supabase-config.js?v=73",
-  "./auth-cloud.js?v=73",
-  "./manifest.webmanifest?v=73",
+  "./styles.css?v=74",
+  "./app.js?v=74",
+  "./supabase-config.js?v=74",
+  "./auth-cloud.js?v=74",
+  "./manifest.webmanifest?v=74",
   "./icons/icon-192.png",
   "./icons/icon-512.png"
 ];
