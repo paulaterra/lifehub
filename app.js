@@ -2289,6 +2289,7 @@ function render() {
 document.querySelectorAll(".nav-item").forEach(btn=>{
   btn.addEventListener("click", ()=>{
     currentView = btn.dataset.view;
+    currentFilter = "Tots";
     selectedWarrantyId = null;
     warrantyEditMode = false;
     selectedRecurring = null;
@@ -2297,8 +2298,11 @@ document.querySelectorAll(".nav-item").forEach(btn=>{
 
     document.querySelectorAll(".nav-item").forEach(x=>x.classList.remove("active"));
     btn.classList.add("active");
+    document.querySelectorAll(".chip").forEach(x=>{
+      x.classList.toggle("active", x.dataset.filter==="Tots");
+    });
 
-    // Manté el filtre seleccionat, però no força un dashboard d'etiqueta fora del Dashboard.
+    // Cada apartat s'obre sense heretar filtres de l'apartat anterior.
     render();
   });
 });
@@ -2592,6 +2596,7 @@ function migrateQuotesSection(){
 }
 loadLifeHubState();
 migrateQuotesSection();
+render();
 saveLifeHubState();
 
 
