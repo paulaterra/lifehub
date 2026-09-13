@@ -2202,3 +2202,67 @@ button,input,select,textarea{touch-action:manipulation}
     max-width:100%!important;
   }
 }
+
+
+/* === v66 / branding === */
+.sidebar .brand.brand-text-only{
+  display:block!important;
+  padding-left:10px!important;
+  padding-right:10px!important;
+  text-align:left!important;
+}
+.sidebar .brand.brand-text-only > div{
+  width:100%;
+  text-align:left!important;
+}
+.sidebar .brand.brand-text-only strong,
+.sidebar .brand.brand-text-only span{
+  text-align:left!important;
+}
+.sidebar .brand.brand-text-only strong{
+  display:block;
+}
+.sidebar .brand.brand-text-only span{
+  display:block;
+  margin-top:3px;
+}
+
+
+/* === v68 / càlculs compartits === */
+.paid-share-inline{
+  display:block;
+  margin-top:2px;
+  font-size:11px;
+  line-height:1.2;
+  font-weight:650;
+  opacity:.62;
+}
+.table-shared-note{
+  display:block;
+  margin-top:3px;
+  font-size:11px;
+  line-height:1.25;
+  font-weight:600;
+  opacity:.62;
+}
+.shared-cost-note{
+  display:block;
+  margin-top:7px;
+  max-width:280px;
+  font-size:11px;
+  line-height:1.35;
+  font-weight:500;
+  opacity:.68;
+}
+.detail-price .paid-share-inline{
+  font-size:12px;
+}
+@media(max-width:760px){
+  .paid-share-inline{
+    font-size:10px;
+  }
+  .shared-cost-note{
+    max-width:100%;
+    text-align:right;
+  }
+}

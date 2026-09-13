@@ -118,18 +118,26 @@ function filtered(items) {
 function sumMonthly(items){ return filtered(items).reduce((a,b)=>a+(b.monthly||0),0); }
 function sumAnnual(items){ return filtered(items).reduce((a,b)=>a+(b.annual||0),0); }
 
+function shareCount(item){
+  const n=Math.floor(Number(item?.sharedBetween||1));
+  return Number.isFinite(n) && n>=1 ? n : 1;
+}
 function recurringPaymentAmount(item,key){
+  // Import BRUT real del rebut segons periodicitat.
   const freq=inferFrequency(item,key);
   const monthly=Number(item?.monthly||0);
   const annual=Number(item?.annual||0);
   if(freq==="Mensual") return monthly || (annual ? annual/12 : 0);
-  if(freq==="Anual") return annual || monthly;
   if(freq==="Trimestral") return monthly || (annual ? annual/4 : 0);
   if(freq==="Semestral") return monthly || (annual ? annual/2 : 0);
+  if(freq==="Anual") return annual || monthly;
   if(freq==="Biennal") return annual || monthly;
   return 0;
 }
-function annualEstimateForItem(item,key){
+function paidRecurringAmount(item,key){
+  return recurringPaymentAmount(item,key)/shareCount(item);
+}
+function annualGrossEstimateForItem(item,key){
   const freq=inferFrequency(item,key);
   const amount=recurringPaymentAmount(item,key);
   if(freq==="Mensual") return amount*12;
@@ -139,19 +147,43 @@ function annualEstimateForItem(item,key){
   if(freq==="Biennal") return amount/2;
   return 0;
 }
+function annualEstimateForItem(item,key){
+  // Totals de LifeHub = només el que paga realment Paula.
+  return annualGrossEstimateForItem(item,key)/shareCount(item);
+}
+function monthlyPaidEquivalent(item,key){
+  return annualEstimateForItem(item,key)/12;
+}
 function monthlyCadenceCost(items,key){
   return filtered(items).filter(i=>inferFrequency(i,key)==="Mensual")
-    .reduce((s,i)=>s+recurringPaymentAmount(i,key),0);
+    .reduce((s,i)=>s+paidRecurringAmount(i,key),0);
 }
 function annualCadenceCost(items,key){
   return filtered(items).filter(i=>inferFrequency(i,key)==="Anual")
-    .reduce((s,i)=>s+recurringPaymentAmount(i,key),0);
+    .reduce((s,i)=>s+paidRecurringAmount(i,key),0);
 }
 function estimatedAnnualTotal(items,key){
   return filtered(items).reduce((s,i)=>s+annualEstimateForItem(i,key),0);
 }
 function estimatedMonthlyAverage(items,key){
   return estimatedAnnualTotal(items,key)/12;
+}
+function shareSelect(prefix,item={}){
+  const value=shareCount(item);
+  const options=Array.from({length:10},(_,i)=>i+1);
+  return `<label class="field"><span>Compartida entre</span>
+    <select id="field-${prefix}-sharedBetween">
+      ${options.map(n=>`<option value="${n}" ${n===value?"selected":""}>${n===1?"Només jo":`${n} persones`}</option>`).join("")}
+    </select>
+    <small class="field-help">LifeHub manté el preu real, però als totals només suma la teva part.</small>
+  </label>`;
+}
+function sharedCostNote(item,key){
+  const count=shareCount(item);
+  if(count<=1) return "";
+  const freq=inferFrequency(item,key);
+  const suffix=freq==="Mensual"?"/mes":freq==="Trimestral"?"/trimestre":freq==="Semestral"?"/semestre":freq==="Anual"?"/any":freq==="Biennal"?"/2 anys":"";
+  return `<span class="shared-cost-note">Preu real ${fmt(recurringPaymentAmount(item,key))}${suffix} · Tu pagues <strong>${fmt(paidRecurringAmount(item,key))}${suffix}</strong> · entre ${count}</span>`;
 }
 function nextRecurringItem(items,key){
   const candidates=filtered(items).map(item=>{
@@ -201,15 +233,13 @@ function getAllItemsForTag(tag){
 }
 
 function recurringEquivalentMonthly(item){
-  if (typeof item.monthly === "number" && item.monthly > 0) return item.monthly;
-  if (typeof item.annual === "number" && item.annual > 0) return item.annual / 12;
-  return 0;
+  const key=item?._section || "subscriptions";
+  return monthlyPaidEquivalent(item,key);
 }
 
 function recurringAnnual(item){
-  if (typeof item.annual === "number" && item.annual > 0) return item.annual;
-  if (typeof item.monthly === "number" && item.monthly > 0) return item.monthly * 12;
-  return 0;
+  const key=item?._section || "subscriptions";
+  return annualEstimateForItem(item,key);
 }
 
 function tagMetrics(tag){
@@ -246,7 +276,7 @@ function tagMetrics(tag){
 function sectionCostForTag(key, tag){
   return (data[key] || []).filter(i=>itemHasTag(i,tag)).reduce((s,i)=>{
     if (key==="warranties") return s;
-    return s + recurringAnnual(i);
+    return s + annualEstimateForItem(i,key);
   },0);
 }
 
@@ -306,9 +336,15 @@ function itemSecondaryInfo(item){
 
 function itemRightValue(item){
   if(item._section==="warranties") return item.amount ? fmt(item.amount) : "—";
-  if((item.monthly||0)>0) return fmt(item.monthly)+"/mes";
-  if((item.annual||0)>0) return fmt(item.annual)+"/any";
-  return "—";
+  const key=item._section || "subscriptions";
+  const freq=inferFrequency(item,key);
+  const gross=recurringPaymentAmount(item,key);
+  if(!gross) return "—";
+  const suffix=freq==="Mensual"?"/mes":freq==="Trimestral"?"/trim.":freq==="Semestral"?"/sem.":freq==="Anual"?"/any":freq==="Biennal"?"/2 anys":"";
+  if(shareCount(item)>1){
+    return `${fmt(gross)}${suffix}<small class="paid-share-inline">Tu: ${fmt(paidRecurringAmount(item,key))}</small>`;
+  }
+  return `${fmt(gross)}${suffix}`;
 }
 
 
@@ -514,9 +550,14 @@ function globalDashboardBottom(){
     </div>`;
 }
 function dashboard() {
-  const recurring = allRecurring();
-  const monthly = sumMonthly(recurring);
-  const annual = sumAnnual(recurring);
+  const annual = [
+    estimatedAnnualTotal(data.subscriptions,"subscriptions"),
+    estimatedAnnualTotal(data.quotes,"quotes"),
+    estimatedAnnualTotal(data.insurance,"insurance"),
+    estimatedAnnualTotal(data.maintenance,"maintenance"),
+    estimatedAnnualTotal(data.digital,"digital")
+  ].reduce((a,b)=>a+b,0);
+  const monthly = annual/12;
   const warrantyCount = filtered(data.warranties).length;
 
   const categories = [
@@ -530,8 +571,8 @@ function dashboard() {
 
   return `
     <div class="grid metrics">
-      ${metric("Cost mensual equivalent", fmt(monthly), "Mitjana de totes les despeses recurrents")}
-      ${metric("Cost anual", fmt(annual), "Estimació anual total")}
+      ${metric("Cost mensual equivalent", fmt(monthly), "Total anual real ÷ 12")}
+      ${metric("Cost anual", fmt(annual), "El que pagues realment")}
       ${metric("Aquest mes", fmt(monthly * .82), "Pagaments previstos aquest mes")}
       ${metric("Garanties actives", warrantyCount, "Elements registrats amb garantia")}
     </div>
@@ -615,12 +656,12 @@ function recurringView(title, items, noun, key) {
         <thead><tr><th>Nom</th><th>Àmbit</th><th>Tipus</th><th>Periodicitat</th><th>Mensual</th><th>Anual</th><th>Proper</th><th>Accions</th></tr></thead>
         <tbody>
           ${f.map((x,idx)=>`<tr>
-            <td data-label="Nom"><strong>${x.name}</strong></td>
+            <td data-label="Nom"><strong>${x.name}</strong>${key==="subscriptions" && shareCount(x)>1 ? `<small class="table-shared-note">Tu: ${fmt(paidRecurringAmount(x,key))}/${inferFrequency(x,key)==="Mensual"?"mes":"pagament"}</small>` : ""}</td>
             <td data-label="Àmbit"><div class="tag-cell">${tagChips(x)}</div></td>
             <td data-label="Tipus">${x.tag}</td>
             <td data-label="Periodicitat"><span class="meta-chip meta-cadence">${inferFrequency(x,key)}</span></td>
             <td data-label="Mensual">${fmt(x.monthly)}</td>
-            <td data-label="Anual">${fmt(x.annual)}</td>
+            <td data-label="Anual">${fmt(annualGrossEstimateForItem(x,key))}${shareCount(x)>1?`<small class="table-shared-note">Tu: ${fmt(annualEstimateForItem(x,key))}/any</small>`:""}</td>
             <td data-label="Proper">${itemReferenceDate(x,key) ? calculateNextRenewal(itemReferenceDate(x,key),inferFrequency(x,key)) : (x.next||"—")}</td>
             <td data-label="Accions">
               <div class="table-actions">
@@ -670,6 +711,7 @@ function recurringDetailView(title, item, key) {
             ${key === "subscriptions" ? subscriptionTypeFields("r", item.tag) : fieldInput("Tipus","r-tag",item.tag)}
             ${fieldInput("Cost mensual","r-monthly",item.monthly,"number")}
             ${fieldInput("Cost anual","r-annual",item.annual,"number")}
+            ${key==="subscriptions" ? shareSelect("r",item) : ""}
             ${recurrenceFields("r",item,key)}
           </div>
         </div>
@@ -700,7 +742,7 @@ function recurringDetailView(title, item, key) {
         <h2>${item.name}</h2>
         <div class="detail-meta">${item.tag}</div>
       </div>
-      <div class="detail-price">${Number(item.annual||0)>0 ? `${fmt(item.annual)}/any` : (Number(item.monthly||0)>0 ? `${fmt(item.monthly)}/mes` : "—")}</div>
+      <div class="detail-price">${itemRightValue({...item,_section:key})}${key==="subscriptions"?sharedCostNote(item,key):""}</div>
     </div>
 
     <div class="detail-grid">
@@ -711,7 +753,9 @@ function recurringDetailView(title, item, key) {
           ${infoRow("Etiquetes",tagChips(item))}
           ${infoRow("Tipus",item.tag)}
           ${infoRow("Cost mensual",fmt(item.monthly))}
-          ${infoRow("Cost anual",fmt(item.annual))}
+          ${infoRow("Cost anual equivalent",fmt(annualGrossEstimateForItem(item,key)))}
+          ${key==="subscriptions" && shareCount(item)>1 ? infoRow("Compartida entre",`${shareCount(item)} persones`) : ""}
+          ${key==="subscriptions" && shareCount(item)>1 ? infoRow("Tu pagues",`${fmt(paidRecurringAmount(item,key))} per pagament · ${fmt(annualEstimateForItem(item,key))}/any`) : ""}
           ${infoRow("Periodicitat",inferFrequency(item,key))}
           ${itemReferenceDate(item,key) ? infoRow(referenceDateLabel(key),itemReferenceDate(item,key)) : ""}
           ${infoRow(nextDateLabel(key), itemReferenceDate(item,key) ? calculateNextRenewal(itemReferenceDate(item,key),inferFrequency(item,key)) : (item.next||"—"))}
@@ -750,6 +794,7 @@ function saveRecurringEdit(key, oldName){
   draft.startDate=recurrence.startDate;
   draft.frequency=recurrence.frequency;
   draft.next=recurrence.startDate ? calculateNextRenewal(recurrence.startDate,recurrence.frequency) : "—";
+  if(key==="subscriptions") draft.sharedBetween = Math.max(1,Number(document.querySelector("#field-r-sharedBetween")?.value || 1));
   draft.scope = document.querySelector("#field-r-scope")?.value || item.scope;
   draft.tags = Array.from(new Set([draft.scope, ...getSelectedTags("r")].filter(Boolean)));
   draft.notes = document.querySelector("#field-r-notes")?.value || "";
@@ -1181,7 +1226,28 @@ function getRecurrenceData(prefix,key,fallbackNext="—"){
 }
 
 function fieldSelect(label,key,value,options){
-  return `<label class="field"><span>${label}</span><select id="field-${key}">${options.map(o=>`<option ${o===value?"selected":""}>${o}</option>`).join("")}</select></label>`;
+  const scopeMatch=key.match(/^(r|w|add)-scope$/);
+  const scopeAttrs=scopeMatch ? ` data-prev-scope="${value||""}" onchange="syncPrimaryScopeTag('${scopeMatch[1]}',this)"` : "";
+  return `<label class="field"><span>${label}</span><select id="field-${key}"${scopeAttrs}>${options.map(o=>`<option ${o===value?"selected":""}>${o}</option>`).join("")}</select></label>`;
+}
+function syncPrimaryScopeTag(prefix,select){
+  const picker=document.querySelector(`#tag-picker-${prefix}`);
+  if(!picker) return;
+  const previous=select.dataset.prevScope||"";
+  const next=select.value||"";
+  if(previous && previous!==next){
+    const oldInput=Array.from(picker.querySelectorAll("input")).find(i=>i.value===previous);
+    if(oldInput){
+      oldInput.checked=false;
+      oldInput.closest(".tag-option")?.classList.remove("selected");
+    }
+  }
+  const nextInput=Array.from(picker.querySelectorAll("input")).find(i=>i.value===next);
+  if(nextInput){
+    nextInput.checked=true;
+    nextInput.closest(".tag-option")?.classList.add("selected");
+  }
+  select.dataset.prevScope=next;
 }
 
 function tagMultiSelect(prefix, selectedTags=[]){
@@ -1966,6 +2032,7 @@ function renderAddForm(){
         ${addType === "subscriptions" ? subscriptionTypeFields("add","Software") : fieldInput("Tipus / categoria","add-tag","")}
         ${fieldInput("Cost mensual","add-monthly","","number")}
         ${fieldInput("Cost anual","add-annual","","number")}
+        ${addType==="subscriptions" ? shareSelect("add",{sharedBetween:1}) : ""}
         ${recurrenceFields("add",null,addType)}
         ${simpleDocumentsField("create")}
       </div>`;
@@ -1986,6 +2053,7 @@ function recurringDiffs(item,key,before){
     changeDetail(key==="subscriptions"?"Pla / categoria":"Tipus",before.tag,item.tag),
     changeDetail("Cost mensual",before.monthly,item.monthly,true),
     changeDetail("Cost anual",before.annual,item.annual,true),
+    ...(key==="subscriptions" ? [changeDetail("Compartida entre",shareCount(before),shareCount(item))] : []),
     changeDetail("Data de referència",before.startDate||"",item.startDate||""),
     changeDetail("Periodicitat",inferFrequency(before,key),inferFrequency(item,key)),
     changeDetail("Proper venciment",before.next,item.next),
@@ -2100,7 +2168,7 @@ function saveNewItem(){
       brand:getVal("add-brand"),
       model:getVal("add-model"),
       scope:getVal("add-scope") || "Personal",
-      tags:Array.from(new Set([getVal("add-scope") || "Personal", ...getSelectedTags("add"), ...(addContextTag ? [addContextTag] : [])])),
+      tags:Array.from(new Set([getVal("add-scope") || "Personal", ...getSelectedTags("add")].filter(Boolean))),
       amount:Number(getVal("add-amount") || 0),
       purchaseDate:getVal("add-purchaseDate"),
       expiry:getVal("add-expiry"),
@@ -2126,10 +2194,11 @@ function saveNewItem(){
     data[addType].push({
       name,
       scope:getVal("add-scope") || "Personal",
-      tags:Array.from(new Set([getVal("add-scope") || "Personal", ...getSelectedTags("add"), ...(addContextTag ? [addContextTag] : [])])),
+      tags:Array.from(new Set([getVal("add-scope") || "Personal", ...getSelectedTags("add")].filter(Boolean))),
       tag:addType === "subscriptions" ? getSubscriptionTypeValue("add") : getVal("add-tag"),
       monthly:Number(getVal("add-monthly") || 0),
       annual:Number(getVal("add-annual") || 0),
+      sharedBetween:addType==="subscriptions" ? Math.max(1,Number(getVal("add-sharedBetween")||1)) : 1,
       startDate:recurrence.startDate,
       frequency:recurrence.frequency,
       next:recurrence.next,
@@ -2178,7 +2247,7 @@ function render() {
   }
   const title = document.querySelector("#page-title");
   const views = {
-    dashboard: ["Bon vespre, Paula", dashboard()],
+    dashboard: ["LifeHub de Paula", dashboard()],
     subscriptions: ["Subscripcions", recurringView("Subscripcions", data.subscriptions, "subscripcions actives", "subscriptions")],
     quotes: ["Quotes", recurringView("Quotes", data.quotes, "quotes actives", "quotes")],
     warranties: ["Compres i garanties", warrantiesView()],
@@ -2477,6 +2546,7 @@ function ensureProductFields(item,key){
   if(!Array.isArray(item.documents)) item.documents=[];
   if(!Array.isArray(item.history)) item.history=[];
   if(!Array.isArray(item.tags)) item.tags=item.scope?[item.scope]:[];
+  if(key==="subscriptions" && (!Number.isFinite(Number(item.sharedBetween)) || Number(item.sharedBetween)<1)) item.sharedBetween=1;
   if(typeof item.reminderDays!=="number") item.reminderDays=lifehubPrefs.reminderDays||15;
   if(!item.asset) item.asset=inferAsset(item,key);
   return item;
