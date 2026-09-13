@@ -796,7 +796,12 @@ function saveRecurringEdit(key, oldName){
   draft.next=recurrence.startDate ? calculateNextRenewal(recurrence.startDate,recurrence.frequency) : "—";
   if(key==="subscriptions") draft.sharedBetween = Math.max(1,Number(document.querySelector("#field-r-sharedBetween")?.value || 1));
   draft.scope = document.querySelector("#field-r-scope")?.value || item.scope;
-  draft.tags = Array.from(new Set([draft.scope, ...getSelectedTags("r")].filter(Boolean)));
+  draft.tags = Array.from(new Set(getSelectedTags("r").filter(Boolean)));
+  if(draft.tags.length){
+    if(!draft.tags.includes(draft.scope)) draft.scope=draft.tags[0];
+  }else{
+    draft.scope="";
+  }
   draft.notes = document.querySelector("#field-r-notes")?.value || "";
 
   const details=recurringDiffs(draft,key,before);
@@ -1645,7 +1650,12 @@ function saveWarrantyEdit(id){
   if(amount) draft.amount=Number((amount.value||"0").replace(",","."));
   const notes=document.querySelector("#field-notes");
   if(notes) draft.notes=notes.value;
-  draft.tags=Array.from(new Set([draft.scope,...getSelectedTags("w")].filter(Boolean)));
+  draft.tags=Array.from(new Set(getSelectedTags("w").filter(Boolean)));
+  if(draft.tags.length){
+    if(!draft.tags.includes(draft.scope)) draft.scope=draft.tags[0];
+  }else{
+    draft.scope="";
+  }
 
   const details=warrantyDiffs(draft,before);
   const newDocs=[...pendingEditDocs];
