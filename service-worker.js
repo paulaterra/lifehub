@@ -1,10 +1,10 @@
-const CACHE_NAME = "lifehub-v70";
+const CACHE_NAME = "lifehub-v71";
 const APP_ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=70",
-  "./app.js?v=70",
-  "./manifest.webmanifest?v=70",
+  "./styles.css?v=71",
+  "./app.js?v=71",
+  "./manifest.webmanifest?v=71",
   "./icons/icon-192.png",
   "./icons/icon-512.png"
 ];

@@ -2067,7 +2067,12 @@ function recurringDiffs(item,key,before){
     changeDetail("Data de referència",before.startDate||"",item.startDate||""),
     changeDetail("Periodicitat",inferFrequency(before,key),inferFrequency(item,key)),
     changeDetail("Proper venciment",before.next,item.next),
-    changeDetail("Àmbit",before.scope,item.scope)
+    changeDetail("Àmbit",before.scope,item.scope),
+    changeDetail(
+      "Etiquetes",
+      (Array.isArray(before.tags)?before.tags:[]).slice().sort().join(", "),
+      (Array.isArray(item.tags)?item.tags:[]).slice().sort().join(", ")
+    )
   ].filter(Boolean);
 }
 
@@ -2077,7 +2082,12 @@ function warrantyDiffs(item,before){
     changeDetail("Preu",before.amount,item.amount,true),
     changeDetail("Garantia fins",before.expiry,item.expiry),
     changeDetail("Botiga",before.seller,item.seller),
-    changeDetail("Model",before.model,item.model)
+    changeDetail("Model",before.model,item.model),
+    changeDetail(
+      "Etiquetes",
+      (Array.isArray(before.tags)?before.tags:[]).slice().sort().join(", "),
+      (Array.isArray(item.tags)?item.tags:[]).slice().sort().join(", ")
+    )
   ].filter(Boolean);
 }
 
