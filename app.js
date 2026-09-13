@@ -549,6 +549,32 @@ function globalDashboardBottom(){
         </div>`).join("")}
     </div>`;
 }
+function dashboardUpcomingItems(limit=4){
+  const now=new Date();
+  now.setHours(0,0,0,0);
+
+  return agendaEvents()
+    .filter(ev=>ev.parsed && ev.parsed.getTime()>=now.getTime())
+    .sort((a,b)=>a.parsed.getTime()-b.parsed.getTime())
+    .slice(0,limit)
+    .map(ev=>{
+      const months=["GEN","FEB","MAR","ABR","MAI","JUN","JUL","AGO","SET","OCT","NOV","DES"];
+      const item=(data[ev.section]||[]).find(x=>x.name===ev.name);
+      let amount="";
+      if(item && ev.section!=="warranties"){
+        const paid=paidRecurringAmount(item,ev.section);
+        amount=paid ? fmt(paid) : "";
+      }
+      return {
+        d:String(ev.parsed.getDate()).padStart(2,"0"),
+        m:months[ev.parsed.getMonth()],
+        t:ev.name,
+        s:ev.sectionLabel,
+        a:amount
+      };
+    });
+}
+
 function dashboard() {
   const annual = [
     estimatedAnnualTotal(data.subscriptions,"subscriptions"),
@@ -595,17 +621,12 @@ function dashboard() {
       <div class="panel">
         <div class="panel-header"><div><h2>Properament</h2><div class="muted">Renovacions i revisions</div></div></div>
         <div class="timeline">
-          ${filtered([
-            {d:"18",m:"SET",t:"Spotify",s:"Subscripció",a:"11,99 €"},
-            {d:"04",m:"OCT",t:"ITV cotxe",s:"Manteniment",a:""},
-            {d:"12",m:"OCT",t:"Aerotèrmia",s:"Revisió",a:"180 €"},
-            {d:"23",m:"OCT",t:"Assegurança llar",s:"Renovació anual",a:"420 €"}
-          ].map(x=>({...x,scope:x.t.includes("cotxe")?"Cotxe":x.t.includes("llar")||x.t.includes("Aerotèrmia")?"Casa":"Personal"}))).map(x=>`
+          ${dashboardUpcomingItems(4).map(x=>`
             <div class="timeline-item">
               <div class="date-box">${x.m}<strong>${x.d}</strong></div>
               <div><div class="item-title">${x.t}</div><div class="item-sub">${x.s}</div></div>
               <div class="amount">${x.a}</div>
-            </div>`).join("") || `<div class="muted">No hi ha venciments per aquest filtre.</div>`}
+            </div>`).join("") || `<div class="muted">No hi ha cap venciment proper registrat.</div>`}
         </div>
       </div>
     </div>
